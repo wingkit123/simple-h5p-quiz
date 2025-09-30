@@ -1,6 +1,9 @@
 // Simple xAPI Tracker without TinCanJS to avoid build issues
 import { v4 as uuidv4 } from 'uuid';
 
+// Debug flag (Vite env) - when true, enables verbose logging (console.debug + detailed statements)
+const DEBUG = (import.meta?.env?.VITE_XAPI_DEBUG === 'true');
+
 // xAPI Configuration
 const XAPI_CONFIG = {
   endpoint: import.meta.env.VITE_XAPI_ENDPOINT || 'console', // 'console' for dev mode
@@ -88,7 +91,7 @@ class SimpleXAPITracker {
     if (!Array.isArray(this.statements)) this.statements = [];
     if (!Array.isArray(this.answerTrackingData)) this.answerTrackingData = [];
     
-    console.log('[xAPI] Tracker initialized - Session:', this.sessionId.slice(0, 8));
+  if (DEBUG) console.log('[xAPI] Tracker initialized - Session:', this.sessionId.slice(0, 8));
   }
 
   // Load data from localStorage
@@ -139,7 +142,7 @@ class SimpleXAPITracker {
       // Only write if forcing or session not present / changed
       if (force || !localStorage.getItem(this.STORAGE_KEYS.SESSION)) {
         localStorage.setItem(this.STORAGE_KEYS.SESSION, JSON.stringify(sessionData));
-        console.debug('[xAPI][ls] session saved');
+  if (DEBUG) console.debug('[xAPI][ls] session saved');
       }
     } catch {
       // Silent fail for localStorage errors
@@ -150,7 +153,7 @@ class SimpleXAPITracker {
   saveStatementsToLocalStorage() {
     try {
       localStorage.setItem(this.STORAGE_KEYS.STATEMENTS, JSON.stringify(this.statements));
-      console.debug('[xAPI][ls] statements saved (count=', this.statements.length, ')');
+  if (DEBUG) console.debug('[xAPI][ls] statements saved (count=', this.statements.length, ')');
     } catch {
       // Silent fail for localStorage errors
     }
@@ -160,7 +163,7 @@ class SimpleXAPITracker {
   saveAnswersToLocalStorage() {
     try {
       localStorage.setItem(this.STORAGE_KEYS.ANSWERS, JSON.stringify(this.answerTrackingData));
-      console.debug('[xAPI][ls] answers saved (count=', this.answerTrackingData.length, ')');
+  if (DEBUG) console.debug('[xAPI][ls] answers saved (count=', this.answerTrackingData.length, ')');
     } catch {
       // Silent fail for localStorage errors
     }
@@ -170,7 +173,7 @@ class SimpleXAPITracker {
   saveActorToLocalStorage() {
     try {
       localStorage.setItem(this.STORAGE_KEYS.ACTOR, JSON.stringify(this.actor));
-      console.debug('[xAPI][ls] actor saved');
+  if (DEBUG) console.debug('[xAPI][ls] actor saved');
     } catch {
       // Silent fail for localStorage errors
     }
@@ -268,7 +271,7 @@ class SimpleXAPITracker {
     this.answerTrackingData.push(answerData);
     this.saveAnswersToLocalStorage(); // Persist answer data to localStorage
 
-    console.log('[xAPI] Question answered:', questionId, isCorrect ? 'correct' : 'incorrect');
+  if (DEBUG) console.log('[xAPI] Question answered:', questionId, isCorrect ? 'correct' : 'incorrect');
 
     const statement = createStatement(
       this.actor,
@@ -331,7 +334,7 @@ class SimpleXAPITracker {
     this.saveStatementsToLocalStorage();
 
     if (XAPI_CONFIG.endpoint === 'console') {
-      console.log(`[xAPI] ${eventType}:`, statement);
+  if (DEBUG) console.log(`[xAPI] ${eventType}:`, statement);
       return;
     }
 
@@ -347,7 +350,7 @@ class SimpleXAPITracker {
     })
     .then(response => {
       if (response.ok) {
-        console.log(`[xAPI] Successfully sent ${eventType} statement`);
+        if (DEBUG) console.log(`[xAPI] Successfully sent ${eventType} statement`);
       } else {
         console.error(`[xAPI] Failed to send ${eventType} statement:`, response.status);
       }
@@ -364,7 +367,7 @@ class SimpleXAPITracker {
       mbox: userInfo.email || XAPI_CONFIG.actor.mbox
     };
     this.saveActorToLocalStorage(); // Persist actor info
-    console.log('[xAPI] User info updated:', this.actor.name);
+  if (DEBUG) console.log('[xAPI] User info updated:', this.actor.name);
   }
 
   // Get basic session info
@@ -392,8 +395,8 @@ class SimpleXAPITracker {
     try {
       localStorage.removeItem(this.STORAGE_KEYS.STATEMENTS);
       localStorage.removeItem(this.STORAGE_KEYS.ANSWERS);
-      console.log('[xAPI] Tracking data cleared');
-      console.debug('[xAPI][ls] statements & answers keys removed');
+  if (DEBUG) console.log('[xAPI] Tracking data cleared');
+  if (DEBUG) console.debug('[xAPI][ls] statements & answers keys removed');
     } catch {
       // Silent fail
     }

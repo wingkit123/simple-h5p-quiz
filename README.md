@@ -61,7 +61,7 @@ Call helper methods (or manually extract via DevTools):
 // In DevTools console (tracker is instantiated within H5PPlayer):
 // You can re-run logic similar to below if you expose tracker instance.
 // If not globally exposed, just copy localStorage values directly.
-JSON.parse(localStorage.getItem('xapi_statements'));
+JSON.parse(localStorage.getItem("xapi_statements"));
 ```
 
 ### **Privacy First**
@@ -152,6 +152,16 @@ npm run dev     # Development server
 npm run build   # Production build
 npm run preview # Preview production build
 ```
+
+### **Environment Flags**
+
+You can control verbose tracking output via an environment variable:
+
+```bash
+VITE_XAPI_DEBUG=true    # Enables detailed console logging (statements, saves)
+```
+
+Add this to a local `.env.local` (don’t commit secrets) or set in your Netlify UI environment variables. When `false` or unset, only essential errors are logged and routine `[xAPI]` statements remain silent.
 
 ### **Project Structure**
 
