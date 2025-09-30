@@ -1,33 +1,34 @@
-# H5P Simple Quiz with Background xAPI Tracking
+# Koha Simple H5P Quiz (Background xAPI Tracking)
 
 ## 🎯 **Overview**
 
-A clean React-based H5P personality quiz application with **background xAPI (Experience API) learning analytics** and **localStorage persistence**. Tracks user interactions silently for future database migration while providing a distraction-free quiz experience.
+A clean React + Vite wrapper around an H5P personality quiz with **silent background xAPI (Experience API) tracking** and **automatic localStorage persistence**. No analytics UI is shown to learners—only the quiz experience. All tracking is logged to the browser console and stored locally for future migration to a real LRS / database.
 
 ## ✨ **Key Features**
 
-### 📊 **Background xAPI Tracking**
+### 📊 **Background xAPI Tracking (Silent)**
 
-- ✅ Silent learning analytics tracking (console logs only)
-- ✅ H5P-compliant xAPI statements
-- ✅ Detailed question/answer tracking
-- ✅ Activity completion monitoring
-- ✅ Standards-compliant implementation
+- ✅ Console-only logging (no on-screen analytics panels)
+- ✅ H5P-compliant xAPI statements (attempted, answered, completed, interacted, progressed)
+- ✅ Per-question answer detail capture
+- ✅ Activity/session metadata with UUID-based session id
+- ✅ Standards-aligned structure (extensions for answers where available)
 
-### 💾 **LocalStorage as Temporary Storage**
+### 💾 **LocalStorage as Temporary Buffer**
 
 - ✅ **Automatic data persistence** for future database migration
 - ✅ **Session continuity** across browser restarts
-- ✅ **Silent background operation** - no UI interference
-- ✅ **Database-ready format** for easy migration
-- ✅ **Offline-capable** analytics collection
+- ✅ **Silent background operation** – no learner distraction
+- ✅ **Database-ready JSON** structures for future import
+- ✅ **Offline-capable** collection (works without network)
 
-### 🎮 **Clean User Experience**
+### 🎮 **Clean User Experience Only**
 
 - ✅ H5P personality quiz integration
 - ✅ Dark/Light theme toggle
 - ✅ Zoom controls for accessibility
 - ✅ Responsive design
+- 🚫 No analytics / dashboard UI (intentionally removed)
 
 ## 🚀 **Quick Start**
 
@@ -41,23 +42,27 @@ npm run dev
 ### Access
 
 - **Local**: http://localhost:5173/
-- **xAPI Panel**: Click "xAPI: ON" button to view analytics
-- **Answer Dashboard**: Click "📊 Answers" for detailed tracking
+- **Tracking**: Open DevTools Console → filter for `[xAPI]` logs
 
 ## 📁 **LocalStorage Tracking**
 
-### **What Gets Stored**
+### **What Gets Stored (Keys)**
 
-- 🗂️ **Session Data**: Session ID, status, timestamps
-- 📋 **xAPI Statements**: Complete learning analytics
-- ✅ **Answer Tracking**: Detailed question responses
-- 👤 **Actor Info**: User information and preferences
+- `xapi_session_data`: Session metadata (id, started, lastUpdated)
+- `xapi_statements`: Array of xAPI statements generated so far
+- `xapi_answer_tracking`: Per-question accumulated answer details
+- `xapi_actor_info`: Actor/identity placeholder (currently anonymous unless extended)
 
-### **Data Management**
+### **Data Management (Developer Use)**
 
-- **📥 Export Data**: Download complete analytics as JSON
-- **🗑️ Clear Data**: Remove tracking data (keep session)
-- **🔄 Reset All**: Full reset including new session
+Call helper methods (or manually extract via DevTools):
+
+```js
+// In DevTools console (tracker is instantiated within H5PPlayer):
+// You can re-run logic similar to below if you expose tracker instance.
+// If not globally exposed, just copy localStorage values directly.
+JSON.parse(localStorage.getItem('xapi_statements'));
+```
 
 ### **Privacy First**
 
@@ -70,22 +75,17 @@ npm run dev
 
 ### **Standards Adherence**
 
-### **Tracked Events**
+### **Tracked Verbs**
 
-- `attempted` - Activity started
-- `answered` - Question responses with detailed data
-- `completed` - Activity completion with scores
-- `interacted` - General UI interactions
-- `progressed` - H5P navigation events
+- `attempted` – Activity start
+- `answered` – Question responses (with choices/outcomes when available)
+- `completed` – Activity completion (includes score fields if provided by H5P)
+- `interacted` – Generic interactions (fallback)
+- `progressed` – Navigation/progress events (if emitted by content type)
 
 ## 📊 **Analytics Dashboard**
 
-### **Real-time Tracking**
-
-- Storage usage statistics
-- xAPI statement counts
-
-### **Data Visualization**
+Removed intentionally. This build is focused on silent background tracking only.
 
 ## 🛠️ **Technical Stack**
 
@@ -107,24 +107,24 @@ npm run dev
 ### Access
 
 - **Local**: http://localhost:5173/
-- **xAPI Tracking**: Check browser console for activity logs
-- **Data Storage**: Automatic localStorage persistence for database migration
+- **Tracking**: Check browser console for `[xAPI]` logs
+- **Data Storage**: Automatic localStorage persistence for future migration
 
-## � **Background Data Collection**
+## 🛰️ **Background Data Collection**
 
-### **What Gets Stored Silently**
+### **Core Stored Buckets**
 
-- 🗂️ **Session Data**: Session ID, status, timestamps
-- 📋 **xAPI Statements**: Complete learning analytics
-- ✅ **Answer Tracking**: Detailed question responses
-- 👤 **Actor Info**: User information and preferences
+- Session Data
+- xAPI Statements
+- Answer Tracking
+- Actor Info
 
 ### **Database Migration Ready**
 
-- **localStorage format**: JSON structures ready for database import
-- **Session continuity**: Maintains data across browser sessions
-- **Silent operation**: No user interface interference
-- **Easy extraction**: `xapiTracker.getAllTrackingData()` method
+- Simple JSON arrays and objects
+- Session continuity across reloads
+- No UI interference
+- Export by copying localStorage payloads (or add an export button later)
 
 ### **Privacy & Data Control**
 
@@ -135,13 +135,13 @@ npm run dev
 - [LocalStorage Implementation](docs/LOCALSTORAGE-TRACKING.md)
 - [xAPI Integration Guide](docs/xAPI-INTEGRATION.md)
 
-## 🧪 **Testing LocalStorage**
+## 🧪 **Testing LocalStorage Manually**
 
-1. **Interact with Quiz**: Answer questions, complete activities
-2. **Check xAPI Panel**: Click "xAPI: ON" → View localStorage status
-3. **Test Persistence**: Refresh page → Verify data remains
-4. **Export Test**: Use "📥 Export Data" → Download JSON file
-5. **DevTools**: Application → Local Storage → View xAPI keys
+1. Interact with the quiz (answer, navigate, complete)
+2. Open DevTools → Console → observe `[xAPI]` logs
+3. Open DevTools → Application → Local Storage → inspect keys above
+4. Refresh page → confirm data persists
+5. Optionally copy `xapi_statements` JSON for analysis
 
 ## 🔧 **Development**
 
@@ -158,8 +158,8 @@ npm run preview # Preview production build
 ```
 src/
 ├── components/
-│   ├── H5PPlayer.jsx           # H5P content renderer
-│   └── AnswerTrackingDashboard.jsx # Analytics UI
+│   ├── H5PPlayer.jsx           # H5P content renderer + tracker wiring
+│   └── (AnswerTrackingDashboard.jsx removed in runtime usage)
 ├── utils/
 │   └── simpleXAPITracker.js    # xAPI + localStorage logic
 ├── config/
@@ -186,7 +186,7 @@ src/
 | LocalStorage     | ✅     | Automatic persistence across sessions  |
 | Data Export      | ✅     | Download analytics as JSON             |
 | Privacy First    | ✅     | Local-only data storage                |
-| Real-time UI     | ✅     | Live tracking dashboard                |
+| Real-time UI     | 🚫     | Dashboard intentionally removed        |
 | Session Recovery | ✅     | Continues from where you left off      |
 | Theme Support    | ✅     | Dark/Light themes                      |
 | Responsive       | ✅     | Works on all device sizes              |
