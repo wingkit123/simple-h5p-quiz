@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useCallback } from "react";
+﻿import React, { useEffect, useRef, useCallback } from "react";
 import { ensureH5PGlobals } from "../utils/h5pLoader";
-import xapiTracker from "../utils/simpleXAPITracker";
+import useXapiTracker from "../hooks/useXapiTracker";
+import PortraitFullscreenH5P from "./PortraitFullscreenH5P";
 
 // Helper function for logging
 const logDebug = (debug, ...messages) => {
@@ -12,190 +13,32 @@ const getActivityId = (h5pPath) => {
   return h5pPath.split('/').pop() || 'unknown-activity';
 };
 
-// Attempt to attach listeners, with optional retry if dispatcher not yet present
-const setupH5PEventListeners = (h5pInstance, activityId, debug, attempt = 0) => {
-  const MAX_ATTEMPTS = 15;
-  if (!window.H5P || !window.H5P.externalDispatcher) {
-    if (attempt === 0) {
-      logDebug(debug, '[xAPI] H5P externalDispatcher not yet available, will retry...');
-    }
-    if (attempt < MAX_ATTEMPTS) {
-      setTimeout(() => setupH5PEventListeners(h5pInstance, activityId, debug, attempt + 1), 200);
-    } else {
-      logDebug(debug, '[xAPI] Gave up waiting for externalDispatcher after', MAX_ATTEMPTS, 'attempts');
-    }
-    return;
-  }
-
-  // Prevent multiple registrations
-  if (window.__H5P_XAPI_LISTENERS_ATTACHED__) {
-    logDebug(debug, '[xAPI] Listeners already attached – skipping');
-    return;
-  }
-  window.__H5P_XAPI_LISTENERS_ATTACHED__ = true;
-
-  logDebug(debug, '[xAPI] Attaching H5P externalDispatcher listeners');
-
-  window.H5P.externalDispatcher.on('xAPI', (event) => {
-    logDebug(debug, '[xAPI] H5P Event:', event.data);
-    
-    const statement = event.data.statement;
-    if (!statement) return;
-
-    try {
-      // Track different types of H5P interactions with enhanced detail
-      const verb = statement.verb?.id;
-      const objectId = statement.object?.id;
-      const result = statement.result;
-      const objectDef = statement.object?.definition;
-      
-      // Use H5P event helper methods when available (H5P Standard Practice)
-      const score = event.getScore ? event.getScore() : (result?.score?.raw || 0);
-      const maxScore = event.getMaxScore ? event.getMaxScore() : (result?.score?.max || 1);
-      const success = event.getScore && event.getMaxScore ? 
-        event.getScore() === event.getMaxScore() && maxScore > 0 : 
-        result?.success;
-      
-      if (verb === 'http://adlnet.gov/expapi/verbs/answered') {
-        // Enhanced question answered tracking
-        const questionData = {
-          id: objectId,
-          type: objectDef?.interactionType || 'choice',
-          choices: objectDef?.choices || [],
-          correctResponsesPattern: objectDef?.correctResponsesPattern || [],
-          index: statement.context?.extensions?.['http://id.tincanapi.com/extension/question-index'],
-          timeSpent: result?.duration
-        };
-
-        // Extract more detailed answer information using H5P enhanced scoring
-        const userAnswer = result?.response || '';
-        const isCorrect = success; // Use H5P enhanced success calculation
-        const questionText = objectDef?.description?.['en-US'] || objectDef?.name?.['en-US'] || 'Question';
-        const correctAnswer = questionData.correctResponsesPattern[0] || 'unknown';
-
-        xapiTracker.trackQuestionAnswered(
-          activityId,
-          objectId || 'unknown-question',
-          questionText,
-          userAnswer,
-          correctAnswer,
-          isCorrect,
-          {
-            ...questionData,
-            enhancedScore: score,
-            enhancedMaxScore: maxScore
-          }
-        );
-
-        // Additional detailed tracking for personality quiz specific data
-        if (statement.context?.extensions) {
-          const extensions = statement.context.extensions;
-          const detailedQuestionData = {
-            id: objectId,
-            text: questionText,
-            selectedAnswer: userAnswer,
-            selectedAnswerText: getAnswerText(userAnswer, questionData.choices),
-            selectedAnswerIndex: userAnswer,
-            correctAnswerText: getAnswerText(correctAnswer, questionData.choices),
-            correctAnswerIndex: correctAnswer,
-            answerOptions: questionData.choices,
-            type: questionData.type,
-            isCorrect: isCorrect,
-            category: extensions['http://id.tincanapi.com/extension/category'],
-            trait: extensions['http://id.tincanapi.com/extension/trait']
-          };
-
-          xapiTracker.trackDetailedQuizAnswer(activityId, detailedQuestionData);
-        }
-
-      } else if (verb === 'http://adlnet.gov/expapi/verbs/completed') {
-        // Activity completed with H5P enhanced scoring
-        xapiTracker.trackActivityCompleted(activityId, activityId, {
-          success: success, // Use enhanced success calculation
-          score: {
-            raw: score, // Use H5P enhanced score
-            max: maxScore, // Use H5P enhanced max score
-            scaled: maxScore > 0 ? score / maxScore : 0
-          },
-          duration: result?.duration
-        });
-        
-      } else if (verb === 'http://adlnet.gov/expapi/verbs/progressed') {
-        // H5P progression events (page changes, etc.) - H5P Standard
-        xapiTracker.trackInteraction(activityId, 'progression', {
-          verb: verb,
-          object: objectId,
-          timestamp: statement.timestamp,
-          context: statement.context
-        });
-        
-      } else if (verb === 'http://adlnet.gov/expapi/verbs/attempted') {
-        // Activity attempted - H5P Standard
-        logDebug(debug, '[xAPI] Activity attempted:', activityId);
-      } else if (verb === 'http://adlnet.gov/expapi/verbs/interacted') {
-        // General interaction with enhanced context
-        xapiTracker.trackInteraction(activityId, 'h5p-interaction', {
-          verb: verb,
-          object: objectId,
-          objectDefinition: objectDef,
-          result: result,
-          timestamp: statement.timestamp,
-          context: statement.context
-        });
-      }
-    } catch (error) {
-      console.error('[xAPI] Error processing H5P event:', error);
-    }
-  });
-
-  // Helper function to get answer text from choices
-  const getAnswerText = (answerId, choices) => {
-    if (!choices || !Array.isArray(choices)) return answerId;
-    const choice = choices.find(c => c.id === answerId);
-    return choice ? choice.description?.['en-US'] || choice.text || answerId : answerId;
-  };
-
-  logDebug(debug, '[xAPI] Event listeners set up for activity:', activityId);
+// Setup H5P event listeners for custom events not covered by useXapiTracker
+const setupH5PEventListeners = (h5pInstance, activityId, debug) => {
+  logDebug(debug, '[H5P Events] Setting up custom event listeners for activity:', activityId);
+  
+  // Note: Main xAPI events are now handled by useXapiTracker hook automatically
+  // Only handle custom personality quiz events here as they don't emit standard xAPI
 
   // Personality Quiz library does NOT emit built-in xAPI; bridge custom events
   try {
     if (h5pInstance && h5pInstance.on) {
-      let personalityQuestionIndex = 0;
       h5pInstance.on('personality-quiz-answer', (data) => {
-        try {
-          const detail = data?.data || data; // library sometimes passes array
-          const personalityArray = Array.isArray(detail) ? detail : [detail];
-          const top = personalityArray[0];
-          const topId = top?.personality || top?.id || `choice-${personalityQuestionIndex}`;
-          const questionId = `pq-${personalityQuestionIndex}`;
-          const questionText = `Personality Selection #${personalityQuestionIndex + 1}`;
-          const optionSet = personalityArray.map(p => ({ id: p.personality || p.id || p.label || 'n/a', text: p.personality || p.id || p.label || 'Option' }));
-
-          // Synthetic neutral answered statement
-          xapiTracker.trackQuestionChoice(activityId, questionId, questionText, topId, optionSet);
-          // Keep interaction event for raw payload auditing
-            xapiTracker.trackInteraction(activityId, 'personality-quiz-answer', { raw: detail });
-          personalityQuestionIndex++;
-          logDebug(debug, '[xAPI] Bridged personality answer -> answered (synthetic)');
-        } catch (e) {
-          console.error('[xAPI] Error bridging personality answer event', e);
-        }
+        logDebug(debug, '[H5P Events] Personality quiz answer:', data);
       });
       h5pInstance.on('personality-quiz-completed', () => {
-        xapiTracker.trackActivityCompleted(activityId, activityId, { success: true });
-        logDebug(debug, '[xAPI] Bridged personality completion -> completed');
+        logDebug(debug, '[H5P Events] Personality quiz completed');
       });
-      logDebug(debug, '[xAPI] Personality quiz custom event bridge active');
+      logDebug(debug, '[H5P Events] Personality quiz custom event bridge active');
     }
   } catch (e) {
-    console.error('[xAPI] Failed setting up personality quiz bridges', e);
+    console.error('[H5P Events] Failed setting up personality quiz bridges', e);
   }
 };
 
 export default function H5PPlayer({
   h5pPath = "/h5p/my-interactive",
   playerBase = "/assets/h5p-player",
-  // iframe is the default in h5p-standalone; allow override for content that may render better in div mode
   embedType = "iframe",
   retryCount = 40,
   retryInterval = 200,
@@ -204,28 +47,34 @@ export default function H5PPlayer({
   const containerRef = useRef(null);
   const pathRef = useRef(h5pPath);
   const wrapperRef = useRef(null);
-
-  // Fullscreen handler
-  const requestFullscreen = () => {
-    const el = wrapperRef.current || containerRef.current;
-    if (!el) return;
-    const anyEl = el;
-    const req = anyEl.requestFullscreen || anyEl.webkitRequestFullscreen || anyEl.msRequestFullscreen;
-    if (req) {
-      req.call(anyEl).then?.(() => {
-        // Attempt orientation lock (best effort)
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(() => {});
-        }
-        applyDynamicVh();
-      }).catch(() => {});
-    }
-  };
+  
+  // Initialize xAPI tracking hook - this handles all the main xAPI events now
+  const { isListening } = useXapiTracker();
+  
+  if (debug && isListening) {
+    logDebug(debug, '[xAPI] Tracker is listening for events');
+  }
 
   // Dynamic viewport height fix for mobile browser UI chrome
   const applyDynamicVh = useCallback(() => {
-    const vh = window.innerHeight * 0.01;
+    const viewportH = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const vh = viewportH * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
+  }, []);
+
+  const setExplicitHeights = useCallback((wrapper) => {
+    if (!wrapper) return;
+    const viewportH = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const viewportW = (window.visualViewport ? window.visualViewport.width : window.innerWidth);
+    
+    wrapper.style.width = viewportW + 'px';
+    wrapper.style.height = viewportH + 'px';
+    
+    const iframe = wrapper.querySelector('iframe');
+    if (iframe) {
+      iframe.style.width = viewportW + 'px';
+      iframe.style.height = viewportH + 'px';
+    }
   }, []);
 
   // Toggle fullscreen class on wrapper
@@ -233,44 +82,32 @@ export default function H5PPlayer({
     const fsElement = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
-    if (fsElement === wrapper) {
+  if (fsElement && wrapper.contains(fsElement)) {
       wrapper.classList.add('is-fullscreen');
+      document.body.style.overflow = 'hidden';
+      const root = document.getElementById('root');
+      if (root) root.classList.add('root-fullscreen-adjust');
       applyDynamicVh();
-      // Force a resize event so H5P can recalc layout
       setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
-      // Explicitly set heights to avoid cut-off (mobile browser UI issues)
-      const targetH = window.innerHeight;
-      wrapper.style.height = targetH + 'px';
-      const iframe = wrapper.querySelector('iframe');
-      if (iframe) {
-        iframe.style.height = targetH + 'px';
-        iframe.style.minHeight = targetH + 'px';
-      }
+      setExplicitHeights(wrapper);
+      setTimeout(() => setExplicitHeights(wrapper), 250);
+      setTimeout(() => setExplicitHeights(wrapper), 800);
     } else {
       wrapper.classList.remove('is-fullscreen');
-      // Cleanup custom vh
       document.documentElement.style.removeProperty('--vh');
       setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
-      // Remove explicit heights
+      wrapper.style.removeProperty('width');
       wrapper.style.removeProperty('height');
       const iframe = wrapper.querySelector('iframe');
       if (iframe) {
+        iframe.style.removeProperty('width');
         iframe.style.removeProperty('height');
-        iframe.style.removeProperty('min-height');
       }
+      document.body.style.overflow = '';
+      const root = document.getElementById('root');
+      if (root) root.classList.remove('root-fullscreen-adjust');
     }
-  }, [applyDynamicVh]);
-
-  useEffect(() => {
-    ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(evt => document.addEventListener(evt, handleFsChange));
-    window.addEventListener('orientationchange', applyDynamicVh);
-    window.addEventListener('resize', applyDynamicVh);
-    return () => {
-      ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(evt => document.removeEventListener(evt, handleFsChange));
-      window.removeEventListener('orientationchange', applyDynamicVh);
-      window.removeEventListener('resize', applyDynamicVh);
-    };
-  }, [handleFsChange, applyDynamicVh]);
+  }, [applyDynamicVh, setExplicitHeights]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,13 +116,10 @@ export default function H5PPlayer({
       pathRef.current = currentPath;
       logDebug(debug, "[H5PPlayer] Mounting content from", currentPath);
 
-      // Quick existence check for h5p.json to surface 404 early
       try {
         const probe = await fetch(`${currentPath}/h5p.json?cb=${Date.now()}`);
         if (!probe.ok) {
-          console.error(
-            `[H5PPlayer] h5p.json not found (status ${probe.status}) at ${currentPath}/h5p.json`
-          );
+          console.error(`[H5PPlayer] h5p.json not found (status ${probe.status}) at ${currentPath}/h5p.json`);
           return;
         }
       } catch (e) {
@@ -293,7 +127,6 @@ export default function H5PPlayer({
         return;
       }
 
-      // Clear previous DOM
       if (containerRef.current) {
         containerRef.current.innerHTML = "";
       }
@@ -316,8 +149,6 @@ export default function H5PPlayer({
           return;
         }
 
-        // Always pass embedType to override inconsistent h5p.json values.
-        // Koha content lists 'div' in h5p.json but library requires 'iframe'.
         const options = { h5pJsonPath: currentPath, frameJs: frameBundle, frameCss, embedType };
         logDebug(debug, "[H5PPlayer] Initializing with options", options);
 
@@ -325,35 +156,19 @@ export default function H5PPlayer({
           const h5pInstance = new Constructor(containerRef.current, options);
           logDebug(debug, "[H5PPlayer] Initialized content for", currentPath);
           
-          // Track activity start with xAPI
           const activityId = getActivityId(currentPath);
           const activityName = activityId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          xapiTracker.trackActivityStarted(activityId, activityName);
+          logDebug(debug, '[H5P Events] Activity started:', activityId, activityName);
           
-          // Set up H5P event listeners for xAPI tracking
           setupH5PEventListeners(h5pInstance, activityId, debug);
-          
-        } catch (err) {
-          if (window.H5P && typeof window.H5P.init === 'function') {
-            window.H5P.init(containerRef.current);
-            logDebug(debug, '[H5PPlayer] Fallback window.H5P.init used for', currentPath);
-            
-            // Track with fallback method
-            const activityId = getActivityId(currentPath);
-            const activityName = activityId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            xapiTracker.trackActivityStarted(activityId, activityName);
-          } else {
-            console.error('[H5PPlayer] init error:', err);
-          }
+        } catch {
+          const activityId = getActivityId(currentPath);
+          const activityName = activityId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          logDebug(debug, '[H5P Events] Activity started (delayed):', activityId, activityName);
         }
 
-        // Post render sanity check
         setTimeout(() => {
-          if (
-            !cancelled &&
-            containerRef.current &&
-            containerRef.current.innerHTML.trim() === ""
-          ) {
+          if (!cancelled && containerRef.current && containerRef.current.innerHTML.trim() === "") {
             logDebug(debug, "[H5PPlayer] Container still empty after initialization. Check console/network for errors.");
           }
         }, 300);
@@ -366,27 +181,25 @@ export default function H5PPlayer({
     };
   }, [h5pPath, playerBase, embedType, retryCount, retryInterval, debug]);
 
+  useEffect(() => {
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('msfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('msfullscreenchange', handleFsChange);
+    };
+  }, [handleFsChange]);
+
   return (
     <div ref={wrapperRef} className="h5p-wrapper" key={h5pPath} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={requestFullscreen}
-        aria-label="Enter fullscreen"
-        style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          zIndex: 10,
-          background: 'rgba(0,0,0,0.55)',
-          color: '#fff',
-          border: 'none',
-          padding: '6px 10px',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '12px'
-        }}
-      >⛶</button>
-      <div ref={containerRef} className="h5p-container" />
+            <PortraitFullscreenH5P
+        targetSelector=".h5p-container"
+        controlsEnabled={true}
+      >
+        <div ref={containerRef} className="h5p-container" />
+      </PortraitFullscreenH5P>
     </div>
   );
 }

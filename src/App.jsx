@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import H5PPlayer from './components/H5PPlayer';
+import useXapiTracker from './hooks/useXapiTracker';
 import './App.css';
 import { H5P_ACTIVITIES, H5P_CONTENT_BASE } from './config/h5pActivities';
 
@@ -23,10 +24,22 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('demo-theme') || 'dark');
   const [zoom, setZoom] = useState(1);
 
+  // Initialize xAPI tracking
+  const { getRecords, getProgressSummary, isListening } = useXapiTracker();
+
   useEffect(() => {
     document.body.classList.toggle('theme-light', theme === 'light');
     localStorage.setItem('demo-theme', theme);
   }, [theme]);
+
+  // Log xAPI tracking status for debugging
+  useEffect(() => {
+    console.log('[App] xAPI Tracking Status:', { isListening });
+    if (isListening) {
+      console.log('[App] xAPI Records:', getRecords().length, 'statements');
+      console.log('[App] Progress Summary:', getProgressSummary());
+    }
+  }, [isListening, getRecords, getProgressSummary]);
 
   const handleZoomIn = () => setZoom(z => Math.min(z + 0.1, 2));
   const handleZoomOut = () => setZoom(z => Math.max(z - 0.1, 0.5));
@@ -80,7 +93,7 @@ export default function App() {
 
        
 
-        <footer className="footer">Koha DigitalH5P Quiz</footer>
+        <footer className="footer">Koha Digital H5P Quiz</footer>
       </main>
     </>
   );
