@@ -12,14 +12,30 @@ const getActivityId = (h5pPath) => {
   return h5pPath.split('/').pop() || 'unknown-activity';
 };
 
-// Setup H5P event listeners for xAPI tracking
-const setupH5PEventListeners = (h5pInstance, activityId, debug) => {
+// Attempt to attach listeners, with optional retry if dispatcher not yet present
+const setupH5PEventListeners = (h5pInstance, activityId, debug, attempt = 0) => {
+  const MAX_ATTEMPTS = 15;
   if (!window.H5P || !window.H5P.externalDispatcher) {
-    logDebug(debug, '[xAPI] H5P event dispatcher not available, setting up basic tracking');
+    if (attempt === 0) {
+      logDebug(debug, '[xAPI] H5P externalDispatcher not yet available, will retry...');
+    }
+    if (attempt < MAX_ATTEMPTS) {
+      setTimeout(() => setupH5PEventListeners(h5pInstance, activityId, debug, attempt + 1), 200);
+    } else {
+      logDebug(debug, '[xAPI] Gave up waiting for externalDispatcher after', MAX_ATTEMPTS, 'attempts');
+    }
     return;
   }
 
-  // Listen for H5P events and convert them to detailed xAPI statements
+  // Prevent multiple registrations
+  if (window.__H5P_XAPI_LISTENERS_ATTACHED__) {
+    logDebug(debug, '[xAPI] Listeners already attached – skipping');
+    return;
+  }
+  window.__H5P_XAPI_LISTENERS_ATTACHED__ = true;
+
+  logDebug(debug, '[xAPI] Attaching H5P externalDispatcher listeners');
+
   window.H5P.externalDispatcher.on('xAPI', (event) => {
     logDebug(debug, '[xAPI] H5P Event:', event.data);
     
@@ -138,8 +154,31 @@ const setupH5PEventListeners = (h5pInstance, activityId, debug) => {
     const choice = choices.find(c => c.id === answerId);
     return choice ? choice.description?.['en-US'] || choice.text || answerId : answerId;
   };
-  
+
   logDebug(debug, '[xAPI] Event listeners set up for activity:', activityId);
+
+  // Personality Quiz library does NOT emit built-in xAPI; bridge custom events
+  try {
+    if (h5pInstance && h5pInstance.on) {
+      h5pInstance.on('personality-quiz-answer', (data) => {
+        try {
+          const detail = data?.data || data; // library sometimes passes array
+          const answerSummary = Array.isArray(detail) ? detail.map(d => d.personality || d).join(',') : JSON.stringify(detail);
+          xapiTracker.trackInteraction(activityId, 'personality-quiz-answer', { raw: detail, summary: answerSummary });
+          logDebug(debug, '[xAPI] Bridged personality answer -> interaction');
+        } catch (e) {
+          console.error('[xAPI] Error bridging personality answer event', e);
+        }
+      });
+      h5pInstance.on('personality-quiz-completed', () => {
+        xapiTracker.trackActivityCompleted(activityId, activityId, { success: true });
+        logDebug(debug, '[xAPI] Bridged personality completion -> completed');
+      });
+      logDebug(debug, '[xAPI] Personality quiz custom event bridge active');
+    }
+  } catch (e) {
+    console.error('[xAPI] Failed setting up personality quiz bridges', e);
+  }
 };
 
 export default function H5PPlayer({
