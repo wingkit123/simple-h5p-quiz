@@ -1,0 +1,8 @@
+/assets/h5p-player/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/h5p/*
+  Cache-Control: public, max-age=3600
+
+/*
+  Cache-Control: no-cache
