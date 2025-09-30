@@ -160,12 +160,23 @@ const setupH5PEventListeners = (h5pInstance, activityId, debug, attempt = 0) => 
   // Personality Quiz library does NOT emit built-in xAPI; bridge custom events
   try {
     if (h5pInstance && h5pInstance.on) {
+      let personalityQuestionIndex = 0;
       h5pInstance.on('personality-quiz-answer', (data) => {
         try {
           const detail = data?.data || data; // library sometimes passes array
-          const answerSummary = Array.isArray(detail) ? detail.map(d => d.personality || d).join(',') : JSON.stringify(detail);
-          xapiTracker.trackInteraction(activityId, 'personality-quiz-answer', { raw: detail, summary: answerSummary });
-          logDebug(debug, '[xAPI] Bridged personality answer -> interaction');
+          const personalityArray = Array.isArray(detail) ? detail : [detail];
+          const top = personalityArray[0];
+          const topId = top?.personality || top?.id || `choice-${personalityQuestionIndex}`;
+          const questionId = `pq-${personalityQuestionIndex}`;
+          const questionText = `Personality Selection #${personalityQuestionIndex + 1}`;
+          const optionSet = personalityArray.map(p => ({ id: p.personality || p.id || p.label || 'n/a', text: p.personality || p.id || p.label || 'Option' }));
+
+          // Synthetic neutral answered statement
+          xapiTracker.trackQuestionChoice(activityId, questionId, questionText, topId, optionSet);
+          // Keep interaction event for raw payload auditing
+            xapiTracker.trackInteraction(activityId, 'personality-quiz-answer', { raw: detail });
+          personalityQuestionIndex++;
+          logDebug(debug, '[xAPI] Bridged personality answer -> answered (synthetic)');
         } catch (e) {
           console.error('[xAPI] Error bridging personality answer event', e);
         }
@@ -192,6 +203,23 @@ export default function H5PPlayer({
 }) {
   const containerRef = useRef(null);
   const pathRef = useRef(h5pPath);
+  const wrapperRef = useRef(null);
+
+  // Fullscreen handler
+  const requestFullscreen = () => {
+    const el = wrapperRef.current || containerRef.current;
+    if (!el) return;
+    const anyEl = el;
+    const req = anyEl.requestFullscreen || anyEl.webkitRequestFullscreen || anyEl.msRequestFullscreen;
+    if (req) {
+      req.call(anyEl).then?.(() => {
+        // Attempt orientation lock (best effort)
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -288,7 +316,25 @@ export default function H5PPlayer({
   }, [h5pPath, playerBase, embedType, retryCount, retryInterval, debug]);
 
   return (
-    <div className="h5p-wrapper" key={h5pPath}>
+    <div ref={wrapperRef} className="h5p-wrapper" key={h5pPath} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={requestFullscreen}
+        aria-label="Enter fullscreen"
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          zIndex: 10,
+          background: 'rgba(0,0,0,0.55)',
+          color: '#fff',
+          border: 'none',
+          padding: '6px 10px',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '12px'
+        }}
+      >⛶</button>
       <div ref={containerRef} className="h5p-container" />
     </div>
   );

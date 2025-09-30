@@ -298,6 +298,53 @@ class SimpleXAPITracker {
     this.saveStatementsToLocalStorage(); // Persist to localStorage
   }
 
+  // Track a neutral (non-graded) choice/answer (e.g., personality quiz question)
+  trackQuestionChoice(activityId, questionId, questionText, userAnswer, optionSet = []) {
+    if (!this.isEnabled) return;
+
+    const answerData = {
+      id: uuidv4(),
+      timestamp: new Date().toISOString(),
+      sessionId: this.sessionId,
+      activityId,
+      questionId,
+      questionText: questionText.substring(0, 120) + (questionText.length > 120 ? '...' : ''),
+      userAnswer,
+      correctAnswer: null,
+      isCorrect: null,
+      options: optionSet,
+      neutral: true
+    };
+    this.answerTrackingData.push(answerData);
+    this.saveAnswersToLocalStorage();
+
+    // Synthetic answered statement without success/score semantics
+    const statement = createStatement(
+      this.actor,
+      XAPI_VERBS.ANSWERED,
+      {
+        id: `${XAPI_CONFIG.activityBase}${activityId}/questions/${questionId}`,
+        name: `Question: ${questionText}`,
+        type: 'http://adlnet.gov/expapi/activities/cmi.interaction'
+      },
+      {
+        response: userAnswer,
+        // success & score omitted intentionally (non-graded)
+      },
+      {
+        registration: this.sessionId,
+        parent: { id: `${XAPI_CONFIG.activityBase}${activityId}` },
+        extensions: {
+          'http://example.com/xapi/extensions/neutral-response': true,
+          'http://example.com/xapi/extensions/option-count': optionSet.length
+        }
+      }
+    );
+
+    this.sendStatement(statement, 'question-choice');
+    this.saveStatementsToLocalStorage();
+  }
+
   // Track general interactions
   trackInteraction(activityId, interactionType, interactionData = {}) {
     if (!this.isEnabled) return;
