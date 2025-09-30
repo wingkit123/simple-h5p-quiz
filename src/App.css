@@ -83,6 +83,38 @@ h1 {
   box-shadow: 0 4px 18px -5px rgba(0,0,0,.55);  
 }
 
+/* Fullscreen modifier (added via JS when entering fullscreen) */
+.h5p-wrapper.is-fullscreen {
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  inset: 0;
+  max-width: none;
+  width: 100vw;
+  height: 100dvh; /* dynamic viewport height when supported */
+  background: #000; /* reduce distraction */
+  display: flex;
+  flex-direction: column;
+}
+
+.h5p-wrapper.is-fullscreen .h5p-container {
+  max-width: none !important;
+  width: 100% !important;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+}
+
+/* Ensure inner iframe (if present) stretches fully */
+.h5p-wrapper.is-fullscreen iframe,
+.h5p-wrapper.is-fullscreen .h5p-iframe,
+.h5p-wrapper.is-fullscreen .h5p-content {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
 .h5p-wrapper h2 {  
   margin: 0 0 .9rem;  
   font-size: 1.25rem;  
@@ -327,6 +359,24 @@ body.theme-light .activity-dropdown {
   }
   #root { padding-left: 1rem; padding-right: 1rem; }
 }
+
+/* Mobile fullscreen adjustments */
+@media (max-width: 800px) {
+  .h5p-wrapper.is-fullscreen { 
+    height: calc(var(--vh, 1vh) * 100);
+    touch-action: none; /* prevent overscroll bounce */
+    overscroll-behavior: contain;
+  }
+  .h5p-wrapper.is-fullscreen iframe { 
+    height: 100% !important; 
+    min-height: 100% !important;
+    display: block; 
+  }
+}
+
+/* Utility class to trigger a height recalculation if needed */
+.force-fs-height-recalc { animation: fs-recalc 0.001s linear; }
+@keyframes fs-recalc { from { opacity: 1; } to { opacity: 1; } }
 /* Improve tap targets & font sizing on small phones */
 @media (max-width:480px) {
   .site-nav { padding: .7rem .9rem; }

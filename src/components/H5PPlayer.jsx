@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { ensureH5PGlobals } from "../utils/h5pLoader";
 import xapiTracker from "../utils/simpleXAPITracker";
 
@@ -217,9 +217,60 @@ export default function H5PPlayer({
         if (screen.orientation && screen.orientation.lock) {
           screen.orientation.lock('landscape').catch(() => {});
         }
+        applyDynamicVh();
       }).catch(() => {});
     }
   };
+
+  // Dynamic viewport height fix for mobile browser UI chrome
+  const applyDynamicVh = useCallback(() => {
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+  }, []);
+
+  // Toggle fullscreen class on wrapper
+  const handleFsChange = useCallback(() => {
+    const fsElement = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    if (fsElement === wrapper) {
+      wrapper.classList.add('is-fullscreen');
+      applyDynamicVh();
+      // Force a resize event so H5P can recalc layout
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+      // Explicitly set heights to avoid cut-off (mobile browser UI issues)
+      const targetH = window.innerHeight;
+      wrapper.style.height = targetH + 'px';
+      const iframe = wrapper.querySelector('iframe');
+      if (iframe) {
+        iframe.style.height = targetH + 'px';
+        iframe.style.minHeight = targetH + 'px';
+      }
+    } else {
+      wrapper.classList.remove('is-fullscreen');
+      // Cleanup custom vh
+      document.documentElement.style.removeProperty('--vh');
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+      // Remove explicit heights
+      wrapper.style.removeProperty('height');
+      const iframe = wrapper.querySelector('iframe');
+      if (iframe) {
+        iframe.style.removeProperty('height');
+        iframe.style.removeProperty('min-height');
+      }
+    }
+  }, [applyDynamicVh]);
+
+  useEffect(() => {
+    ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(evt => document.addEventListener(evt, handleFsChange));
+    window.addEventListener('orientationchange', applyDynamicVh);
+    window.addEventListener('resize', applyDynamicVh);
+    return () => {
+      ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(evt => document.removeEventListener(evt, handleFsChange));
+      window.removeEventListener('orientationchange', applyDynamicVh);
+      window.removeEventListener('resize', applyDynamicVh);
+    };
+  }, [handleFsChange, applyDynamicVh]);
 
   useEffect(() => {
     let cancelled = false;
